@@ -1,0 +1,223 @@
+#!/bin/bash
+
+# Function to create a new dictionary file
+createDictionary() {
+    local dictFile="$1"
+    echo "Word Hexadecimal" > "$dictFile"
+}
+
+# Function to perform compression
+compress() {
+   
+
+# Initialize the arrays and counters
+Checkarray=(" " "," "." "!" "?" ";" ":" "'" "\"" "(" ")" "[" "]" "{" "}" "<" ">" "/" "\\" "|" "&" "=" "+" "-" "*" "@" "#" "$" "%" "^" "_" $'\n')
+tempWord=""
+wordDictFile="dictionary.txt"
+declare -A wordHexMap  # Associative array to store word-hexadecimal mappings
+
+# Check if the dictionary file exists, if not initialize it with a header
+if [ ! -f "$wordDictFile" ]; then
+    echo "Word Hexadecimal" > "$wordDictFile"
+fi
+
+# Read the existing dictionary file and populate the wordHexMap
+while read -r word hexValue; do
+    if [[ "$word" != "Word" ]]; then
+        wordHexMap["$word"]=$hexValue
+    fi
+done < "$wordDictFile"
+
+# Prompt the user to provide the path of the input file
+echo "Enter the path of the input file:"
+read -r inputFilePath
+
+# Check if the provided file exists
+if [ ! -f "$inputFilePath" ]; then
+    echo "File not found: $inputFilePath"
+    exit 1
+fi
+
+# Read the input sentence from the provided file
+inputSentence=$(<"$inputFilePath")
+
+ compressedContent=""
+
+    # Loop through each character in the input sentence
+    for ((i = 0; i < ${#inputSentence}; i++)); do
+        char="${inputSentence:i:1}"
+
+        if [[ " ${Checkarray[*]} " == *" $char "* ]]; then
+            if [ -n "$tempWord" ]; then
+                # Check if the word exists in wordHexMap
+                if [ -n "${wordHexMap["$tempWord"]}" ]; then
+                    hexValue=${wordHexMap["$tempWord"]}
+                else
+                    hexValue=$(printf "0x%04x" ${#wordHexMap[@]})
+                    wordHexMap["$tempWord"]=$hexValue
+
+                    # Add the new word to the dictionary file
+                    echo "$tempWord $hexValue" >> "$wordDictFile"
+                fi
+
+                compressedContent=" $hexValue"
+                echo "$compressedContent" >> compressed.txt               
+                echo "Word: $tempWord, Hexadecimal: $hexValue"
+                tempWord=""
+            fi
+
+            # Process the punctuation or space
+            if [ -n "${wordHexMap["$char"]}" ]; then
+                hexValue=${wordHexMap["$char"]}
+            else
+                hexValue=$(printf "0x%04x" ${#wordHexMap[@]})
+                wordHexMap["$char"]=$hexValue
+
+                # Add the new character to the dictionary file
+                echo "$char $hexValue" >> "$wordDictFile"
+            fi
+
+            echo "Char: $char, Hexadecimal: $hexValue"
+            compressedContent=" $hexValue"
+            echo "$compressedContent" >> compressed.txt
+        else
+            # Append the character to the current word
+            tempWord="$tempWord$char"
+        fi
+    done
+
+    # If there's a pending word in tempWord after loop completion
+    if [ -n "$tempWord" ]; then
+        if [ -n "${wordHexMap["$tempWord"]}" ]; then
+            hexValue=${wordHexMap["$tempWord"]}
+        else
+            hexValue=$(printf "0x%04x" ${#wordHexMap[@]})
+            wordHexMap["$tempWord"]=$hexValue
+
+            # Add the new word to the dictionary file
+            echo "$tempWord $hexValue" >> "$wordDictFile"
+        fi
+
+        compressedContent=" $hexValue"
+        echo "$compressedContent" >> compressed.txt
+    
+    fi
+     echo "Compressed data written to compressed.txt"
+
+
+# calculate the number of char in the uncompressed file 
+numOFcharacters=$( wc -m < "$inputFilePath" )
+
+# calculate the uncompressed file size
+uncompressed_size=$((numOFcharacters * 16))
+echo "$numOFcharacters"
+echo "size of the uncompressed file = $uncompressed_size"
+
+#calculate the number of codes in  the  compressed file
+numOFcodes=$( wc -l < compressed.txt )
+
+#calculate the compressed file size 
+compressed_size=$((numOFcodes * 16))
+echo "$numOFcodes"
+echo "size of the compressed file= $compressed_size"
+
+#calculate the File Compression Ratio  
+CompressionRatio=$(echo "scale=3; $uncompressed_size / $compressed_size")
+echo "File Compression Ratio = $compresionRatio"   
+}
+
+
+
+decompress() {
+    # Ask the user to enter the path of the file containing hexadecimal numbers
+    echo "Enter the path of the file containing hexadecimal numbers:"
+    read -r hexFilePath
+
+    if [ ! -f "$hexFilePath" ]; then
+        echo "File not found: $hexFilePath"
+        return
+    fi
+
+    # Ask the user to provide the path for the output file
+    echo "Enter the path for the output file:"
+    read -r outputFilePath
+
+    # Check if the dictionary file exists
+    if [ ! -f "dictionary.txt" ]; then
+        echo "Error: Dictionary file not found."
+        return
+    fi
+
+    words=""
+    # Read the hexadecimal numbers from the file and perform decompression
+    decompressedContent=""
+while IFS= read -r line; do 
+ while IFS= read -r lines; do
+if [[ "$lines"  != "Word Hexadecimal" ]]; then            
+            word="${lines%% *}"
+            hexValue="${lines##* }"
+            words="$hexValue"
+            no_spaces=$(echo "$line" | tr -d ' ')
+            if [[ "$no_spaces" == "$words" ]]; then
+            if [[ "$word" == "" ]]; then
+               echo -n  " " >> "$outputFilePath"
+            else            
+                echo -n  "$word" >> "$outputFilePath"
+            fi
+            fi
+fi
+done < dictionary.txt
+done < compressed.txt
+# Write the decompressed content to the output file
+    echo "Decompressed data written to $outputFilePath"
+}
+
+
+
+
+
+    # Check if the dictionary file exists
+    echo "Does the dictionary.txt file exist? (yes/no)"
+    read -r dictionaryExist
+
+    if [[ "$dictionaryExist" =~ ^[Yy][Ee]?[Ss] ]]; then
+        echo "Enter the path of the existing dictionary.txt file:"
+        read -r dictFilePath
+
+        if [ ! -f "$dictFilePath" ]; then
+            echo "File not found: $dictFilePath"
+            exit 1
+        fi
+
+        
+    else
+        echo "Creating a new dictionary.txt file."
+        wordHexMap=()
+        createDictionary "dictionary.txt"
+    fi
+while true; do
+    # Display the menu for compression or decompression
+    echo "Choose an option (or q to quit):"
+    echo "c, compress, or compression: Perform compression"
+    echo "d, decompress, or decompression: Perform decompression"
+    echo "q: Quit"
+
+    read -r option
+
+    case "$option" in
+        [Cc])
+            compress
+            ;;
+        [Dd])
+            decompress
+            ;;
+        [Qq])
+            echo "Quitting the program."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option: $option. Please choose 'c' for compression, 'd' for decompression, or 'q' to quit."
+            ;;
+    esac
+done
+
